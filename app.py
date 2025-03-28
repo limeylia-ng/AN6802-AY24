@@ -2,13 +2,16 @@ from flask import Flask, request, render_template
 import sqlite3
 import datetime
 import google.generativeai as genai
+import os
+import wikipedia
+
+api = os.getenv("makersuite")
+model = genai.GenerativeModel("gemini-1.5-flash")
+genai.configure(api_key=api)
 
 app = Flask(__name__)
 
 flag = 1
-api = "AIzaSyCvLtcDVKeqamwpdQSwPfx0tVL7wiaIeNs"
-model = genai.GenerativeModel("gemini-1.5-flash")
-genai.configure(api_key=api)
 
 @app.route("/", methods=["POST", "GET"])
 def index():
@@ -32,6 +35,14 @@ def main():
 @app.route("/foodexp", methods=["POST", "GET"])
 def foodexp():
     return (render_template("foodexp.html"))
+
+@app.route("/foodexp1", methods=["POST", "GET"])
+def foodexp1():
+    return (render_template("foodexp1.html"))
+
+@app.route("/foodexp2", methods=["POST", "GET"])
+def foodexp2():
+    return (render_template("foodexp2.html"))
 
 @app.route("/foodexp_pred", methods=["POST", "GET"])
 def foodexp_pred():
@@ -59,6 +70,12 @@ def FAQ1():
     r = model.generate_content("Factors for Profit")
     r = r.candidates[0].content.parts[0].text
     return (render_template("FAQ1.html",r=r))
+
+@app.route("/FAQinput", methods=["POST", "GET"])
+def FAQinput():
+    q = request.form.get("q")
+    r = wikipedia.summary(q)
+    return (render_template("FAQinput.html",r=r))
     
 @app.route("/userLog", methods=["POST", "GET"])
 def userLog():
@@ -84,4 +101,4 @@ def deleteLog():
     return (render_template("deleteLog.html"))
 
 if __name__ == "__main__":
-    app.run()
+    app.run(debug=True)
