@@ -102,5 +102,5 @@ Follow the steps below to run the project on your local machine:
 6. **Open Your Browser and Visit**
 
    ```
-   http://127.0.0.1:8000/
+   http://127.0.0.1:5000/
    ```
