@@ -2,16 +2,23 @@ from flask import Flask, request, render_template
 import sqlite3
 import datetime
 import google.generativeai as genai
+import time, requests
+import re
 import os
-import wikipedia
+import threading
+import markdown
 
+app = Flask(__name__)
+
+flag = True
+
+# Get API
 api = os.getenv("makersuite")
 model = genai.GenerativeModel("gemini-1.5-flash")
 genai.configure(api_key=api)
 
-app = Flask(__name__)
-
-flag = 1
+telegram_api = os.getenv("telegram")
+url = f"https://api.telegram.org/bot{telegram_api}/"
 
 @app.route("/", methods=["POST", "GET"])
 def index():
@@ -20,7 +27,7 @@ def index():
 @app.route("/main", methods=["POST", "GET"])
 def main():
     global flag
-    if flag == 1:
+    if flag:
         t = datetime.datetime.now()
         user_name = request.form.get("q")
         conn = sqlite3.connect("user.db")
@@ -29,16 +36,12 @@ def main():
         conn.commit()
         c.close()
         conn.close()
-        flag = 0
+        flag = False
     return (render_template("main.html"))
 
 @app.route("/foodexp", methods=["POST", "GET"])
 def foodexp():
     return (render_template("foodexp.html"))
-
-@app.route("/foodexp1", methods=["POST", "GET"])
-def foodexp1():
-    return (render_template("foodexp1.html"))
 
 @app.route("/foodexp2", methods=["POST", "GET"])
 def foodexp2():
@@ -74,8 +77,77 @@ def FAQ1():
 @app.route("/FAQinput", methods=["POST", "GET"])
 def FAQinput():
     q = request.form.get("q")
-    r = wikipedia.summary(q)
+    r = model.generate_content(q)
+    r = markdown.markdown(r.text)
+    r = re.sub(r'<.*?>', '', r)
     return (render_template("FAQinput.html",r=r))
+
+@app.route("/telegram", methods = ['POST','GET'])
+def telegram():
+    return(render_template("telegram.html"))
+
+def predict_default(salary):
+    prompt = f"A person with a salary of ${salary} is likely to:"
+    response = model.generate_content(prompt)
+    return response.candidates[0].content.parts[0]
+  
+@app.route('/start_telegram', methods=['GET','POST'])
+def start_telegram():
+    thread = threading.Thread(target=run_telegram_bot)
+    thread.daemon = True
+    thread.start()
+    return render_template("main.html")
+
+def run_telegram_bot():
+    flag = ""
+    # chat = "7494700360"
+    chat = "6466874020"
+    prompt = "Please enter your salary and Gemini will judge it: (Type 'break' to exit)"
+    while True:
+        try:
+            msg = url + f"sendMessage?chat_id={chat}&text={prompt}"
+            requests.get(msg)
+            time.sleep(5)
+            r = requests.get(url + 'getUpdates')
+            r = r.json()
+            r = r['result'][-1]['message']['text']
+            if r == "break":
+                break
+            if flag != r:
+                flag = r
+                if r.isnumeric():
+                    # Make prediction
+                    prediction = predict_default(r)
+                    cleaned_text = f"{prediction}".replace('**', '')
+
+                    # Remove the word "text:" at the beginning, if it exists
+                    text = re.sub(r'^text:\s*', '', cleaned_text)
+
+                    # Remove bullet points (* ) at the beginning of lines
+                    text = re.sub(r'^\s*\*\s+', '', text, flags=re.MULTILINE)
+
+                    # Remove extra newlines and replace them with spaces
+                    text = text.replace('\\n', ' ').replace("\\n\n", "").replace("\n\n\n", "")
+
+                    # Remove surrounding quotes (if any)
+                    text = text.strip('"')
+
+                    # Remove any remaining asterisks (*)
+                    text = text.replace('*', '')
+
+                    # Remove extra spaces caused by replacements
+                    text = ' '.join(text.split())
+
+                    # Print prediction
+                    msg = url + f"sendMessage?chat_id={chat}&text={text}"
+                    requests.get(msg)
+                else:
+                    msg = url + f"sendMessage?chat_id={chat}&text={r} is not a number"
+                    requests.get(msg)
+            time.sleep(8)  
+        except Exception as e:
+            print(f"Error in Telegram bot: {e}")
+            time.sleep(10)         
     
 @app.route("/userLog", methods=["POST", "GET"])
 def userLog():
